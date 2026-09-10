@@ -16,7 +16,7 @@ export interface ActionPlanItem {
   details: string;
 }
 
-export interface ComplianceReport {
+export type ComplianceReport = {
   id: string;
   user_id: string;
   stripe_payment_intent_id?: string | null;
@@ -34,9 +34,9 @@ export interface ComplianceReport {
   pdf_storage_path?: string | null;
   paid_at?: string | null;
   created_at?: string;
-}
+};
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       reports: {
@@ -48,7 +48,10 @@ export interface Database {
           is_saved?: boolean;
         };
         Update: Partial<ComplianceReport>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
   };
-}
+};
