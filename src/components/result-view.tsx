@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import type { ComplianceReport } from '@/types/database';
 import { RiskBadge } from './risk-badge';
+import { CheckoutElement } from './checkout-element';
+import { AccountUpgrade } from './account-upgrade';
 import {
   FileText,
   Lock,
@@ -18,16 +20,16 @@ interface ResultViewProps {
   report: ComplianceReport;
   onReset: () => void;
   onInitiateCheckout?: () => void;
-  children?: React.ReactNode; // Optional slot for embedded payment/upsell
+  children?: React.ReactNode;
 }
 
 export function ResultView({
   report: initialReport,
   onReset,
-  onInitiateCheckout,
   children,
 }: ResultViewProps) {
   const [report, setReport] = useState<ComplianceReport>(initialReport);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   // Poll Supabase for pdf_ready if a payment has been made but PDF is not ready yet
   useEffect(() => {
@@ -140,30 +142,48 @@ export function ResultView({
       {/* Slot for Children (Phase 3 Stripe checkout & fulfillment) */}
       {children}
 
-      {/* PDF Ready State or Upsell Teaser */}
+      {/* PDF Ready State & Account Upgrade Upsell */}
       {report.pdf_ready ? (
-        <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-6 sm:p-8 text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
-            <CheckCircle2 className="w-6 h-6" />
+        <div className="space-y-6">
+          <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-6 sm:p-8 text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Your Complete Compliance Report is Ready!
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                Your official PDF audit report has been compiled and emailed to{' '}
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {report.receipt_email || 'your receipt email'}
+                </span>
+                .
+              </p>
+            </div>
+            <a
+              href={`/api/reports/${report.id}/download`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download Official PDF Report</span>
+            </a>
           </div>
-          <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white">
-              Your Complete Compliance Report is Ready!
-            </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-              Your official PDF audit report has been compiled and emailed to your receipt address.
-            </p>
-          </div>
-          <a
-            href={`/api/reports/${report.id}/download`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download Official PDF Report</span>
-          </a>
+
+          {/* Micro-SaaS Upsell: Permanent Account Conversion */}
+          <AccountUpgrade initialEmail={report.receipt_email} />
         </div>
+      ) : showCheckout ? (
+        <CheckoutElement
+          report={report}
+          onPaymentSuccess={(updated) => {
+            setReport(updated);
+            setShowCheckout(false);
+          }}
+          onCancel={() => setShowCheckout(false)}
+        />
       ) : (
         /* Locked Teaser Section */
         <div className="relative rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-900 text-white p-8 overflow-hidden shadow-2xl">
@@ -227,20 +247,18 @@ export function ResultView({
               </div>
             </div>
 
-            {/* Checkout Action Button */}
-            {onInitiateCheckout && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={onInitiateCheckout}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-sm shadow-xl hover:shadow-blue-600/30 transition-all"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>Unlock Full Audit PDF Report ($29)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            {/* Checkout Trigger Action */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCheckout(true)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-sm shadow-xl hover:shadow-blue-600/30 transition-all"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Unlock Full Audit PDF Report ($29)</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
