@@ -1,6 +1,7 @@
-import { createAdminClient } from '@/lib/supabase/admin';
 import { generateCompliancePdfBuffer } from '@/lib/pdf/generator';
 import { resend, isResendMock } from '@/lib/resend/client';
+import { getReportById, getReportByPaymentIntentId, updateReportPaid } from '@/lib/db/reports';
+import { uploadReportPdf } from '@/lib/storage';
 import { getMockReport, updateMockReport } from './mock-store';
 import type { ComplianceReport } from '@/types/database';
 
@@ -20,30 +21,14 @@ export interface FulfillmentResult {
 }
 
 /**
- * Checks if the Supabase environment is using placeholder or test configuration.
- */
-function checkIsPlaceholderSupabase(): boolean {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  return (
-    !supabaseUrl ||
-    supabaseUrl.includes('placeholder') ||
-    supabaseUrl.includes('your-project') ||
-    serviceRoleKey === 'your-service-role-key' ||
-    serviceRoleKey.includes('placeholder') ||
-    process.env.MOCK_SUPABASE === 'true'
-  );
-}
-
-/**
  * Background fulfillment task executed asynchronously when Stripe confirms payment.
  *
  * Steps:
- * 1. Look up report by reportId or stripe_payment_intent_id.
- * 2. Webhook Idempotency Check: if report.pdf_ready is already true, log and return immediately.
+ * 1. Look up report by reportId or stripe_payment_intent_id in Neon DB.
+ * 2. Webhook Idempotency Check: if report.pdf_ready is already true, return immediately.
  * 3. Generate PDF Buffer via generateCompliancePdfBuffer(report).
- * 4. Upload PDF to Supabase Storage 'compliance-reports' bucket under '${report.user_id}/${report.id}.pdf'.
- * 5. Update Supabase 'reports' row: pdf_ready = true, paid_at = now, receipt_email = email, pdf_storage_path = path.
+ * 4. Upload PDF to Vercel Blob (or virtual path if token not set).
+ * 5. Update Neon DB 'reports' row: pdf_ready = true, paid_at = now, receipt_email, pdf_storage_path.
  * 6. Send transactional fulfillment email via Resend attaching the PDF buffer.
  */
 export async function fulfillComplianceReportPayment({
@@ -52,27 +37,22 @@ export async function fulfillComplianceReportPayment({
   receiptEmail,
 }: FulfillPaymentOptions): Promise<FulfillmentResult> {
   try {
-    const isPlaceholderDb = checkIsPlaceholderSupabase();
     let report: ComplianceReport | null = null;
 
-    // 1. Look up the report
-    if (!isPlaceholderDb) {
-      const supabase = createAdminClient();
-      let query = supabase.from('reports').select('*');
-
-      if (reportId) {
-        query = query.eq('id', reportId);
-      } else {
-        query = query.eq('stripe_payment_intent_id', paymentIntentId);
-      }
-
-      const { data, error } = await query.single();
-      if (!error && data) {
-        report = data as unknown as ComplianceReport;
+    // 1. Look up the report in Neon DB
+    if (process.env.DATABASE_URL) {
+      try {
+        if (reportId) {
+          report = await getReportById(reportId);
+        } else {
+          report = await getReportByPaymentIntentId(paymentIntentId);
+        }
+      } catch (dbErr) {
+        console.warn('[Webhook Fulfillment] DB query error, trying fallback:', dbErr);
       }
     }
 
-    // Check mock store fallback if not found in db or in mock mode
+    // Check mock store fallback
     if (!report) {
       if (reportId) {
         report = getMockReport(reportId) || null;
@@ -111,53 +91,25 @@ export async function fulfillComplianceReportPayment({
       `[Webhook Fulfillment] Generated PDF buffer (${pdfBuffer.length} bytes) for Report ${report.id}`
     );
 
-    // 4. Upload PDF to Supabase Storage 'compliance-reports' bucket
-    const storagePath = `${report.user_id}/${report.id}.pdf`;
-    if (!isPlaceholderDb) {
-      try {
-        const supabase = createAdminClient();
-        const { error: uploadError } = await supabase.storage
-          .from('compliance-reports')
-          .upload(storagePath, pdfBuffer, {
-            contentType: 'application/pdf',
-            upsert: true,
-          });
+    // 4. Upload PDF to Vercel Blob (or fallback)
+    const storagePath = `compliance-reports/${report.user_id}/${report.id}.pdf`;
+    const uploadedUrlOrPath = await uploadReportPdf(storagePath, pdfBuffer);
 
-        if (uploadError) {
-          console.warn(
-            `[Webhook Fulfillment] Supabase storage upload warning for ${storagePath}: ${uploadError.message}`
-          );
-        } else {
-          console.log(`[Webhook Fulfillment] Uploaded PDF to Supabase Storage: ${storagePath}`);
-        }
-      } catch (uploadErr) {
-        console.warn('[Webhook Fulfillment] Storage upload caught error:', uploadErr);
-      }
-    }
-
-    // 5. Update Supabase 'reports' row
+    // 5. Update Neon 'reports' row
     const paidAt = new Date().toISOString();
     const finalReceiptEmail = receiptEmail || report.receipt_email || null;
 
-    if (!isPlaceholderDb) {
-      const supabase = createAdminClient();
-      const { error: updateError } = await supabase
-        .from('reports')
-        .update({
-          pdf_ready: true,
+    if (process.env.DATABASE_URL) {
+      try {
+        await updateReportPaid(report.id, {
           paid_at: paidAt,
           receipt_email: finalReceiptEmail,
-          pdf_storage_path: storagePath,
+          pdf_storage_path: uploadedUrlOrPath,
           stripe_payment_intent_id: paymentIntentId,
-        })
-        .eq('id', report.id);
-
-      if (updateError) {
-        console.error(
-          `[Webhook Fulfillment] Failed to update report status in Supabase: ${updateError.message}`
-        );
-      } else {
-        console.log(`[Webhook Fulfillment] Successfully marked report ${report.id} as pdf_ready.`);
+        });
+        console.log(`[Webhook Fulfillment] Successfully marked report ${report.id} as pdf_ready in Neon.`);
+      } catch (updateError) {
+        console.error('[Webhook Fulfillment] Failed to update report status in Neon:', updateError);
       }
     }
 
@@ -166,7 +118,7 @@ export async function fulfillComplianceReportPayment({
       pdf_ready: true,
       paid_at: paidAt,
       receipt_email: finalReceiptEmail,
-      pdf_storage_path: storagePath,
+      pdf_storage_path: uploadedUrlOrPath,
       stripe_payment_intent_id: paymentIntentId,
     });
 
@@ -181,7 +133,7 @@ export async function fulfillComplianceReportPayment({
       } else {
         try {
           const fromEmail =
-            process.env.RESEND_FROM_EMAIL || 'EU AI Act Compliance <compliance@resend.dev>';
+            process.env.RESEND_FROM_EMAIL || 'EU AI Act Compliance <onboarding@resend.dev>';
           const emailResponse = await resend.emails.send({
             from: fromEmail,
             to: finalReceiptEmail,
@@ -231,7 +183,7 @@ export async function fulfillComplianceReportPayment({
     return {
       success: true,
       reportId: report.id,
-      storagePath,
+      storagePath: uploadedUrlOrPath,
       emailSent,
     };
   } catch (err: unknown) {

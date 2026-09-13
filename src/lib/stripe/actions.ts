@@ -1,7 +1,7 @@
 'use server';
 
 import { stripe, isStripeMock } from './client';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { getReportById, updateReportPaymentIntent } from '@/lib/db/reports';
 import { getMockReport, updateMockReport } from './mock-store';
 import type { ComplianceReport } from '@/types/database';
 
@@ -13,24 +13,9 @@ export type CreatePaymentIntentResult =
   | { success: true; clientSecret: string; paymentIntentId: string }
   | { success: false; error: string };
 
-function checkIsPlaceholderSupabase(): boolean {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  return (
-    !supabaseUrl ||
-    supabaseUrl.includes('placeholder') ||
-    supabaseUrl.includes('your-project') ||
-    serviceRoleKey === 'your-service-role-key' ||
-    serviceRoleKey.includes('placeholder') ||
-    process.env.MOCK_SUPABASE === 'true'
-  );
-}
-
 /**
  * Creates a Stripe Payment Intent for $29 ($2900 cents) associated with a Compliance Report.
- * Updates the report's `stripe_payment_intent_id` in Supabase.
- *
- * Supports input as `{ reportId: string }` or plain `string`.
+ * Updates the report's `stripe_payment_intent_id` in the database.
  */
 export async function createPaymentIntentAction(
   inputOrReportId: CreatePaymentIntentInput | string
@@ -46,20 +31,14 @@ export async function createPaymentIntentAction(
     }
 
     const cleanReportId = reportId.trim();
-    const isPlaceholderDb = checkIsPlaceholderSupabase();
     let report: ComplianceReport | null = null;
 
-    // 1. Retrieve or validate report in Supabase
-    if (!isPlaceholderDb) {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('id', cleanReportId)
-        .single();
-
-      if (!error && data) {
-        report = data as unknown as ComplianceReport;
+    // 1. Retrieve report from Neon DB
+    if (process.env.DATABASE_URL) {
+      try {
+        report = await getReportById(cleanReportId);
+      } catch (err) {
+        console.warn('Failed querying Neon for report, falling back to mock store:', err);
       }
     }
 
@@ -68,8 +47,7 @@ export async function createPaymentIntentAction(
       report = getMockReport(cleanReportId) || null;
     }
 
-    // If real database was queried and report wasn't found (and not placeholder)
-    if (!isPlaceholderDb && !report) {
+    if (!report) {
       return { success: false, error: `Report ${cleanReportId} not found.` };
     }
 
@@ -80,12 +58,12 @@ export async function createPaymentIntentAction(
       const mockId = `pi_mock_${cleanReportId}_${Date.now()}`;
       const mockSecret = `${mockId}_secret_${Math.random().toString(36).substring(2, 10)}`;
 
-      if (!isPlaceholderDb) {
-        const supabase = createAdminClient();
-        await supabase
-          .from('reports')
-          .update({ stripe_payment_intent_id: mockId })
-          .eq('id', cleanReportId);
+      if (process.env.DATABASE_URL) {
+        try {
+          await updateReportPaymentIntent(cleanReportId, mockId);
+        } catch (err) {
+          console.warn('Could not update payment intent in Neon:', err);
+        }
       }
 
       updateMockReport(cleanReportId, {
@@ -118,15 +96,11 @@ export async function createPaymentIntentAction(
       };
     }
 
-    // 3. Update Supabase reports table with stripe_payment_intent_id
-    if (!isPlaceholderDb) {
-      const supabase = createAdminClient();
-      const { error: updateError } = await supabase
-        .from('reports')
-        .update({ stripe_payment_intent_id: paymentIntent.id })
-        .eq('id', cleanReportId);
-
-      if (updateError) {
+    // 3. Update database with stripe_payment_intent_id
+    if (process.env.DATABASE_URL) {
+      try {
+        await updateReportPaymentIntent(cleanReportId, paymentIntent.id);
+      } catch (updateError) {
         console.error(
           `Failed to record stripe_payment_intent_id on report ${cleanReportId}:`,
           updateError
@@ -151,9 +125,6 @@ export async function createPaymentIntentAction(
   }
 }
 
-/**
- * Convenient alias accepting direct reportId parameter.
- */
 export async function createPaymentIntent(reportId: string): Promise<CreatePaymentIntentResult> {
   return createPaymentIntentAction({ reportId });
 }

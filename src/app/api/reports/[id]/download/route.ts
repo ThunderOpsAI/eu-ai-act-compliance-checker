@@ -1,29 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { getReportById } from '@/lib/db/reports';
 import { generateCompliancePdfBuffer } from '@/lib/pdf/generator';
+import { downloadReportPdf } from '@/lib/storage';
 import { getMockReport } from '@/lib/stripe/mock-store';
 import type { ComplianceReport } from '@/types/database';
-
-function checkIsPlaceholderSupabase(): boolean {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  return (
-    !supabaseUrl ||
-    supabaseUrl.includes('placeholder') ||
-    supabaseUrl.includes('your-project') ||
-    serviceRoleKey === 'your-service-role-key' ||
-    serviceRoleKey.includes('placeholder') ||
-    process.env.MOCK_SUPABASE === 'true'
-  );
-}
 
 /**
  * Report Download API Route
  *
  * GET /api/reports/[id]/download
  *
- * Validates report existence, retrieves the compiled PDF from Supabase Storage
- * (or generates on-the-fly via generateCompliancePdfBuffer), and streams the PDF
+ * Validates report existence, retrieves the compiled PDF from Vercel Blob
+ * (or generates dynamically via generateCompliancePdfBuffer), and streams the PDF
  * attachment to the user.
  */
 export async function GET(
@@ -39,20 +27,14 @@ export async function GET(
     }
 
     const reportId = id.trim();
-    const isPlaceholderDb = checkIsPlaceholderSupabase();
     let report: ComplianceReport | null = null;
 
-    // 1. Fetch report from Supabase
-    if (!isPlaceholderDb) {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('id', reportId)
-        .single();
-
-      if (!error && data) {
-        report = data as unknown as ComplianceReport;
+    // 1. Fetch report from Neon DB
+    if (process.env.DATABASE_URL) {
+      try {
+        report = await getReportById(reportId);
+      } catch (err) {
+        console.warn('[Report Download] Failed querying Neon DB, checking mock store:', err);
       }
     }
 
@@ -68,18 +50,11 @@ export async function GET(
       );
     }
 
-    // 2. Fetch from Supabase Storage if available
+    // 2. Fetch from Blob storage if available
     let pdfBuffer: Buffer | null = null;
-    if (report.pdf_storage_path && !isPlaceholderDb) {
+    if (report.pdf_storage_path) {
       try {
-        const supabase = createAdminClient();
-        const { data: fileData, error: storageErr } = await supabase.storage
-          .from('compliance-reports')
-          .download(report.pdf_storage_path);
-
-        if (!storageErr && fileData) {
-          pdfBuffer = Buffer.from(await fileData.arrayBuffer());
-        }
+        pdfBuffer = await downloadReportPdf(report.pdf_storage_path);
       } catch (err) {
         console.warn(
           `[Report Download] Failed downloading stored PDF from ${report.pdf_storage_path}, falling back to generator:`,

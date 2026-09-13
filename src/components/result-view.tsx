@@ -14,7 +14,7 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { getReportStatusAction } from '@/actions/get-report';
 
 interface ResultViewProps {
   report: ComplianceReport;
@@ -31,7 +31,7 @@ export function ResultView({
   const [report, setReport] = useState<ComplianceReport>(initialReport);
   const [showCheckout, setShowCheckout] = useState(false);
 
-  // Poll Supabase for pdf_ready if a payment has been made but PDF is not ready yet
+  // Poll for pdf_ready if a payment has been made but PDF is not ready yet
   useEffect(() => {
     if (report.pdf_ready) return;
 
@@ -39,17 +39,10 @@ export function ResultView({
     const shouldPoll = Boolean(report.stripe_payment_intent_id || report.paid_at);
     if (!shouldPoll) return;
 
-    const supabase = createClient();
     const interval = setInterval(async () => {
       try {
-        const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('id', report.id)
-          .single();
-
-        if (!error && data) {
-          const updated = data as unknown as ComplianceReport;
+        const updated = await getReportStatusAction(report.id);
+        if (updated) {
           setReport(updated);
           if (updated.pdf_ready) {
             clearInterval(interval);
