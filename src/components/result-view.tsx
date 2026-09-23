@@ -275,7 +275,7 @@ Verified against official text of Regulation (EU) 2024/1689.
           <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
             Statutory Article Citation
           </span>
-          <p className="text-base font-bold text-blue-600 dark:text-blue-400 font-mono tracking-tight leading-snug">
+          <p data-testid="matched-article" className="text-base font-bold text-blue-600 dark:text-blue-400 font-mono tracking-tight leading-snug">
             {report.matched_article}
           </p>
         </div>
@@ -342,6 +342,7 @@ Verified against official text of Regulation (EU) 2024/1689.
             {report.obligations.map((item, index) => (
               <div
                 key={index}
+                data-testid="obligation-item"
                 className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/90 bg-slate-50/50 dark:bg-slate-950/40 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -358,6 +359,7 @@ Verified against official text of Regulation (EU) 2024/1689.
                       {item.article}
                     </span>
                     <span
+                      data-testid="mandatory-badge"
                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                         item.mandatory
                           ? 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'
@@ -401,6 +403,7 @@ Verified against official text of Regulation (EU) 2024/1689.
             </div>
             <div className="pt-2">
               <a
+                data-testid="download-pdf"
                 href={`/api/reports/${report.id}/download`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -416,17 +419,19 @@ Verified against official text of Regulation (EU) 2024/1689.
           <AccountUpgrade initialEmail={report.receipt_email} />
         </div>
       ) : showCheckout ? (
-        <CheckoutElement
-          report={report}
-          onPaymentSuccess={(updated) => {
-            setReport(updated);
-            setShowCheckout(false);
-          }}
-          onCancel={() => setShowCheckout(false)}
-        />
+        <div data-testid="checkout-element">
+          <CheckoutElement
+            report={report}
+            onPaymentSuccess={(updated) => {
+              setReport(updated);
+              setShowCheckout(false);
+            }}
+            onCancel={() => setShowCheckout(false)}
+          />
+        </div>
       ) : (
         /* Locked Teaser Section */
-        <div className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white p-7 sm:p-9 overflow-hidden shadow-2xl">
+        <div data-testid="blurred-teaser" className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white p-7 sm:p-9 overflow-hidden shadow-2xl">
           {/* Subtle ambient lighting */}
           <div className="absolute -right-24 -bottom-24 w-96 h-96 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
           <div className="absolute -left-24 -top-24 w-96 h-96 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none" />
@@ -493,6 +498,7 @@ Verified against official text of Regulation (EU) 2024/1689.
             {/* Checkout Trigger Action */}
             <div className="pt-2">
               <button
+                data-testid="checkout-cta"
                 type="button"
                 onClick={() => {
                   setShowCheckout(true);

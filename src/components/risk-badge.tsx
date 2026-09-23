@@ -74,7 +74,10 @@ export function RiskBadge({ tier, size = 'md', showDescription = false }: RiskBa
 
   if (size === 'lg') {
     return (
-      <div className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 ${config.bgColor} ${config.borderColor} transition-all shadow-sm`}>
+      <div
+        data-testid="risk-badge"
+        className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 ${config.bgColor} ${config.borderColor} transition-all shadow-sm`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center gap-4">
             <div className={`p-4 rounded-xl ${config.badgeColor} shrink-0`}>

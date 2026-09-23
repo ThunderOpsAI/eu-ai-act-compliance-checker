@@ -167,7 +167,7 @@ export function CheckoutElement({
             {onCancel && (
               <button
                 type="button"
-                onClick={onCancel}
+                data-testid="checkout-cancel-button" onClick={onCancel}
                 disabled={loading}
                 className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
               >
@@ -176,7 +176,7 @@ export function CheckoutElement({
             )}
 
             <button
-              type="submit"
+              data-testid="checkout-submit-button" type="submit"
               disabled={loading}
               className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md hover:shadow-blue-600/30 transition-all disabled:opacity-50 cursor-pointer"
             >

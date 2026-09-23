@@ -147,7 +147,7 @@ export function ComplianceForm({
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form data-testid="form-container" onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl shadow-slate-900/5 dark:shadow-black/20 overflow-hidden transition-all">
           <div className="p-6 sm:p-8 space-y-5">
             {/* Input 1: System Name / Model Identifier with Floating Label */}
@@ -220,16 +220,28 @@ export function ComplianceForm({
                     <span>Min. 10 characters required</span>
                   )}
                 </span>
-                <span className="tabular-nums font-medium text-[11px]">
+                <span data-testid="char-counter" className="tabular-nums font-medium text-[11px]">
                   {description.length.toLocaleString()} / 10,000 chars
                 </span>
               </div>
             </div>
 
             {error && (
-              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-xs sm:text-sm flex items-center gap-2.5">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
-                <span className="font-medium">{error}</span>
+              <div
+                data-testid="error-boundary"
+                className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-xs sm:text-sm flex items-center justify-between gap-2.5"
+              >
+                <div className="flex items-center gap-2.5">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
+                  <span className="font-medium">{error}</span>
+                </div>
+                <button
+                  data-testid="retry-button"
+                  type="submit"
+                  className="shrink-0 text-xs font-semibold underline underline-offset-2 text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-200 cursor-pointer"
+                >
+                  Try Again
+                </button>
               </div>
             )}
 
@@ -245,7 +257,7 @@ export function ComplianceForm({
                     key={preset.title}
                     type="button"
                     disabled={loading}
-                    onClick={() => handlePresetSelect(preset)}
+                    data-testid="preset-button" onClick={() => handlePresetSelect(preset)}
                     className="text-left p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-blue-500/60 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 text-xs text-slate-700 dark:text-slate-300 transition-all flex items-center justify-between group disabled:opacity-50 shadow-xs cursor-pointer"
                   >
                     <span className="font-semibold text-slate-800 dark:text-slate-200 truncate pr-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
@@ -290,7 +302,10 @@ export function ComplianceForm({
 
       {/* Loading Stepper Animation */}
       {loading && (
-        <div className="mt-6 p-5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/40 text-center animate-fade-in shadow-xs">
+        <div
+          data-testid="progress-stepper"
+          className="mt-6 p-5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/40 text-center animate-fade-in shadow-xs"
+        >
           <div className="flex items-center justify-center gap-3">
             <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
             <span className="text-xs sm:text-sm font-semibold text-blue-950 dark:text-blue-200">
