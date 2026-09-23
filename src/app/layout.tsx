@@ -13,7 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EU AI Act Compliance Checker",
+  metadataBase: new URL("https://euaipass.com"),
+  title: "EU AI Pass | EU AI Act Compliance Checker",
   description: "Instant AI risk tier classification and regulatory compliance reporting under the EU AI Act.",
 };
 
