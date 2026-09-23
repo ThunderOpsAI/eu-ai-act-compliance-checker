@@ -4,6 +4,17 @@ import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe/client';
 import { fulfillComplianceReportPayment } from '@/lib/stripe/fulfillment';
 
+function safeWaitUntil(promise: Promise<unknown>) {
+  try {
+    waitUntil(promise);
+  } catch {
+    // Standalone Node.js environment fallback
+    promise.catch((err) => {
+      console.error('[Stripe Webhook] Background task error:', err);
+    });
+  }
+}
+
 /**
  * Stripe Webhook Route Handler
  *
@@ -76,7 +87,7 @@ export async function POST(req: NextRequest) {
     );
 
     // CRITICAL REQUIREMENT: Enforce asynchronous execution using waitUntil
-    waitUntil(
+    safeWaitUntil(
       fulfillComplianceReportPayment({
         paymentIntentId,
         reportId,
@@ -101,7 +112,7 @@ export async function POST(req: NextRequest) {
       `[Stripe Webhook] Received checkout.session.completed for Session: ${session.id} (Report ID: ${reportId})`
     );
 
-    waitUntil(
+    safeWaitUntil(
       fulfillComplianceReportPayment({
         paymentIntentId,
         reportId,

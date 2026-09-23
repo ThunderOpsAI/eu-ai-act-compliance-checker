@@ -63,23 +63,23 @@ export function AccountUpgrade({ initialEmail, onUpgradeSuccess }: AccountUpgrad
   }
 
   return (
-    <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 via-white to-indigo-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 p-6 sm:p-7 shadow-sm space-y-4">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0 mt-0.5">
+    <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/40 via-white to-indigo-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 p-6 sm:p-7 shadow-xs space-y-4">
+      <div className="flex items-start gap-3.5">
+        <div className="p-2.5 rounded-xl bg-blue-600 text-white shrink-0 mt-0.5 shadow-sm shadow-blue-600/30">
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div className="space-y-1">
-          <h4 className="font-extrabold text-slate-900 dark:text-white text-base">
-            Save This Report to Your Permanent Account
+          <h4 className="font-extrabold text-slate-900 dark:text-white text-base tracking-tight">
+            Save This Audit Report to Your Permanent Account
           </h4>
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
             Upgrade your current anonymous session to a permanent account for free. Keep your full EU AI Act audit history permanently accessible and unlock unlimited recurring checks.
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleUpgrade} className="space-y-3 pt-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <form onSubmit={handleUpgrade} className="space-y-3.5 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div className="space-y-1">
             <label htmlFor="upgrade-email" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
               Account Email
@@ -95,7 +95,7 @@ export function AccountUpgrade({ initialEmail, onUpgradeSuccess }: AccountUpgrad
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="founder@company.eu"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 pl-9 pr-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 transition-all font-medium"
               />
             </div>
           </div>
@@ -116,14 +116,14 @@ export function AccountUpgrade({ initialEmail, onUpgradeSuccess }: AccountUpgrad
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimum 6 characters"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 pl-9 pr-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 transition-all font-medium"
               />
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-medium">
             {error}
           </div>
         )}
@@ -131,7 +131,7 @@ export function AccountUpgrade({ initialEmail, onUpgradeSuccess }: AccountUpgrad
         <button
           type="submit"
           disabled={loading}
-          className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+          className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold text-xs shadow-sm hover:shadow-md transition-all disabled:opacity-50 cursor-pointer"
         >
           {loading ? (
             <>

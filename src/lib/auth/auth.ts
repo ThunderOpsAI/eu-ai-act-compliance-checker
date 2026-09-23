@@ -4,7 +4,7 @@ import { Pool } from "@neondatabase/serverless";
 
 export const auth = betterAuth({
   database: new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL || "postgresql://mock:mock@localhost:5432/mock",
   }),
   emailAndPassword: {
     enabled: true,
@@ -13,5 +13,5 @@ export const auth = betterAuth({
     anonymous(),
   ],
   secret: process.env.BETTER_AUTH_SECRET || "eu-ai-act-compliance-checker-super-secure-secret-key-32",
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3005",
+  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
 });

@@ -4,10 +4,7 @@ let globalPool: Pool | null = null;
 
 export function getDbPool(): Pool {
   if (!globalPool) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is not defined.');
-    }
+    const connectionString = process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
     globalPool = new Pool({ connectionString });
   }
   return globalPool;

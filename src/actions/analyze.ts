@@ -2,6 +2,7 @@
 
 import { classifySystemPrompt } from '@/lib/gemini/service';
 import { insertReport } from '@/lib/db/reports';
+import { setMockReport } from '@/lib/stripe/mock-store';
 import type { ComplianceReport } from '@/types/database';
 
 export interface AnalyzeComplianceInput {
@@ -105,6 +106,7 @@ export async function analyzeComplianceAction(
         ...reportPayload,
         created_at: new Date().toISOString(),
       };
+      setMockReport(mockReport);
       return { success: true, report: mockReport };
     }
 

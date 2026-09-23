@@ -1,0 +1,7 @@
+{
+  "name": "EU AI Act Compliance Checker",
+  "description": "Instant AI risk tier classification and regulatory compliance reporting under the EU AI Act.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
