@@ -6,9 +6,10 @@ interface RiskBadgeProps {
   tier: RiskTier;
   size?: 'sm' | 'md' | 'lg';
   showDescription?: boolean;
+  className?: string;
 }
 
-export function RiskBadge({ tier, size = 'md', showDescription = false }: RiskBadgeProps) {
+export function RiskBadge({ tier, size = 'md', showDescription = false, className = '' }: RiskBadgeProps) {
   const configs = {
     Unacceptable: {
       label: 'Unacceptable Risk (Prohibited)',
@@ -65,7 +66,9 @@ export function RiskBadge({ tier, size = 'md', showDescription = false }: RiskBa
 
   if (size === 'sm') {
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${config.badgeColor}`}>
+      <span
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${config.badgeColor} print:shadow-none print:border print:border-current ${className}`}
+      >
         <Icon className="w-3.5 h-3.5 shrink-0" />
         <span className="whitespace-nowrap">{config.shortLabel}</span>
       </span>
@@ -74,31 +77,33 @@ export function RiskBadge({ tier, size = 'md', showDescription = false }: RiskBa
 
   if (size === 'lg') {
     return (
-      <div className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 ${config.bgColor} ${config.borderColor} transition-all shadow-sm`}>
+      <div
+        className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 ${config.bgColor} ${config.borderColor} transition-all shadow-sm print:bg-white print:border-slate-400 print:shadow-none print:p-5 print:break-inside-avoid ${className}`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center gap-4">
-            <div className={`p-4 rounded-xl ${config.badgeColor} shrink-0`}>
+            <div className={`p-4 rounded-xl ${config.badgeColor} shrink-0 print:shadow-none`}>
               <Icon className="w-8 h-8" />
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400 print:text-slate-600">
                 <span>EU AI Act Classification</span>
                 <span aria-hidden="true">·</span>
-                <span className={config.accentColor}>{config.legalRef}</span>
+                <span className={`${config.accentColor} print:text-black font-bold`}>{config.legalRef}</span>
               </div>
-              <h3 className={`text-2xl sm:text-3xl font-black tracking-tight ${config.textColor}`}>
+              <h3 className={`text-2xl sm:text-3xl font-black tracking-tight ${config.textColor} print:text-black`}>
                 {config.label}
               </h3>
               {showDescription && (
-                <p className="text-sm font-normal text-slate-700 dark:text-slate-300 max-w-2xl leading-relaxed pt-0.5">
+                <p className="text-sm font-normal text-slate-700 dark:text-slate-300 print:text-slate-800 max-w-2xl leading-relaxed pt-0.5">
                   {config.subtext}
                 </p>
               )}
             </div>
           </div>
-          <div className="hidden lg:flex flex-col items-end justify-center shrink-0 border-l border-slate-200/60 dark:border-slate-800/80 pl-6">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Statutory Level</span>
-            <span className={`text-base font-extrabold ${config.accentColor}`}>
+          <div className="hidden lg:flex flex-col items-end justify-center shrink-0 border-l border-slate-200/60 dark:border-slate-800/80 print:border-slate-300 pl-6">
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 print:text-slate-600 uppercase tracking-wider">Statutory Level</span>
+            <span className={`text-base font-extrabold ${config.accentColor} print:text-black`}>
               {tier === 'Unacceptable' ? 'Level 4 / Prohibited' : tier === 'High' ? 'Level 3 / High Risk' : tier === 'Limited' ? 'Level 2 / Transparency' : 'Level 1 / Permitted'}
             </span>
           </div>
@@ -108,7 +113,9 @@ export function RiskBadge({ tier, size = 'md', showDescription = false }: RiskBa
   }
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border ${config.bgColor} ${config.borderColor} ${config.textColor} font-semibold text-sm`}>
+    <div
+      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border ${config.bgColor} ${config.borderColor} ${config.textColor} font-semibold text-sm print:bg-white print:border-slate-400 print:text-black print:shadow-none ${className}`}
+    >
       <Icon className="w-4 h-4 shrink-0" />
       <span>{config.label}</span>
     </div>
