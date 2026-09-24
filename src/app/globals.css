@@ -56,3 +56,78 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* =========================================================
+   Print-Specific CSS Rules for Clean, Text-Focused Reports
+   ========================================================= */
+@media print {
+  @page {
+    margin: 14mm 14mm 14mm 14mm;
+    size: A4 portrait;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10.5pt !important;
+    line-height: 1.45 !important;
+  }
+
+  /* Universal hide for non-essential navigation and UI chrome */
+  header,
+  footer,
+  nav,
+  .no-print,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Strip ambient background glow, grids, and filters */
+  .bg-compliance-grid,
+  [class*="blur-"],
+  [class*="bg-gradient-"] {
+    background-image: none !important;
+    filter: none !important;
+  }
+
+  /* Flatten container layout for printing */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Clean print cards */
+  .print\:border-slate-300 {
+    border-color: #cbd5e1 !important;
+  }
+
+  .print\:bg-white {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+  }
+
+  .print\:text-black {
+    color: #000000 !important;
+  }
+
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  /* Prevent awkward page break cuts across obligations and cards */
+  .break-inside-avoid,
+  .print\:break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* High contrast colors for print rendering */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

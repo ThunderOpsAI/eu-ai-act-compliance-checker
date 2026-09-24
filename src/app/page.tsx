@@ -7,6 +7,7 @@ import { ComplianceForm } from '@/components/compliance-form';
 import { ResultView } from '@/components/result-view';
 import { ProgressStepper } from '@/components/progress-stepper';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { FaqSection } from '@/components/faq-section';
 import type { ComplianceReport } from '@/types/database';
 
 export default function HomePage() {
@@ -16,9 +17,9 @@ export default function HomePage() {
   const [hasInput, setHasInput] = useState(false);
 
   return (
-    <div className="relative min-h-screen flex flex-col bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 selection:bg-blue-600 selection:text-white overflow-x-hidden">
+    <div className="relative min-h-screen flex flex-col bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 selection:bg-blue-600 selection:text-white overflow-x-hidden print:bg-white print:text-black">
       {/* High-tech ambient background layer */}
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden print:hidden" aria-hidden="true">
         {/* Fine Technical Grid Matrix with Radial Falloff */}
         <div className="absolute inset-0 bg-compliance-grid opacity-70 dark:opacity-45 [mask-image:radial-gradient(ellipse_75%_65%_at_50%_15%,#000_45%,transparent_90%)]" />
 
@@ -43,7 +44,7 @@ export default function HomePage() {
       </div>
 
       {/* Top EU-Styled Navigation Bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#090e1a]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#090e1a]/80 backdrop-blur-md print:hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/20 shrink-0">
@@ -75,10 +76,10 @@ export default function HomePage() {
       </header>
 
       {/* Main Content Body */}
-      <main className="relative flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-10">
+      <main className="relative flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-10 print:py-0 print:px-0 print:space-y-4 print:max-w-none">
         <ErrorBoundary>
           {!report ? (
-            <div className="space-y-8 animate-fade-in">
+            <div className="space-y-8 animate-fade-in print:hidden">
               {/* Hero Header */}
               <div className="text-center max-w-3xl mx-auto space-y-4">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-600/10 text-blue-700 dark:text-blue-400 text-xs font-bold tracking-wide border border-blue-600/20 shadow-xs">
@@ -161,10 +162,15 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
+
+              {/* Regulatory FAQ Accordion */}
+              <div className="max-w-3xl mx-auto pt-2">
+                <FaqSection />
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-4xl mx-auto print:hidden">
                 <ProgressStepper
                   currentStep={report.pdf_ready ? 4 : 3}
                   hasInput={true}
@@ -186,7 +192,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/80 dark:border-slate-800/80 py-8 bg-white/70 dark:bg-[#090e1a]/70 backdrop-blur-md text-slate-500 text-xs mt-auto">
+      <footer className="border-t border-slate-200/80 dark:border-slate-800/80 py-8 bg-white/70 dark:bg-[#090e1a]/70 backdrop-blur-md text-slate-500 text-xs mt-auto print:hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Scale className="w-4 h-4 text-blue-600" />

@@ -11,7 +11,7 @@ import { Page, Route } from '@playwright/test';
 import { HIGH_RISK_REPORT, MINIMAL_RISK_REPORT, PROHIBITED_REPORT } from '../fixtures/reports';
 import type { RiskTier } from '@/types/database';
 
-type MockTier = RiskTier | 'High' | 'Minimal' | 'Unacceptable';
+type MockTier = RiskTier | 'High' | 'Minimal' | 'Unacceptable' | 'High Risk' | 'Minimal Risk' | 'Prohibited';
 
 export async function mockAnalyzeRoute(
   page: Page,
@@ -45,8 +45,8 @@ export async function mockAnalyzeRoute(
     }
 
     let report = HIGH_RISK_REPORT;
-    if (tier === 'Minimal') report = MINIMAL_RISK_REPORT;
-    if (tier === 'Unacceptable') report = PROHIBITED_REPORT;
+    if (tier === 'Minimal' || tier === 'Minimal Risk') report = MINIMAL_RISK_REPORT;
+    if (tier === 'Unacceptable' || tier === 'Prohibited') report = PROHIBITED_REPORT;
 
     // Server actions return a special format: [null, result] or the result directly
     // We return it wrapped as the action would

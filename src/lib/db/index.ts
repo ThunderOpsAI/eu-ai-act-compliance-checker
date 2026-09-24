@@ -9,3 +9,8 @@ export function getDbPool(): Pool {
   }
   return globalPool;
 }
+
+export const sql: any = (...args: any[]) => {
+  throw new Error('Direct sql template execution not configured in driver pool');
+};
+

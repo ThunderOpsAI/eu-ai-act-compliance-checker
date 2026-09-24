@@ -17,8 +17,12 @@ import {
   Check,
   FileCode,
   ListChecks,
+  Loader2,
+  Printer,
+  Scale,
 } from 'lucide-react';
 import { getReportStatusAction } from '@/actions/get-report';
+import { FaqSection } from './faq-section';
 
 interface ResultViewProps {
   report: ComplianceReport;
@@ -39,6 +43,8 @@ export function ResultView({
   const [showCheckout, setShowCheckout] = useState(false);
   const [copied, setCopied] = useState(false);
   const [jsonExported, setJsonExported] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
 
   // Poll for pdf_ready if a payment has been made but PDF is not ready yet
   useEffect(() => {
@@ -180,22 +186,185 @@ Verified against official text of Regulation (EU) 2024/1689.
     setTimeout(() => setJsonExported(false), 2500);
   };
 
+  const handleDownloadPdf = async () => {
+    setPdfDownloading(true);
+    const filename = `EU-AI-Act-Compliance-Report-${report.risk_tier.toLowerCase()}-${report.id.slice(0, 8)}.pdf`;
+
+    const triggerDownload = (blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setPdfDownloaded(true);
+      setTimeout(() => setPdfDownloaded(false), 3000);
+    };
+
+    try {
+      // 1. Try server-side route powered by @react-pdf/renderer
+      const response = await fetch('/api/reports/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        triggerDownload(blob);
+        return;
+      }
+
+      // 2. Fallback to GET endpoint
+      const fallbackRes = await fetch(`/api/reports/${report.id}/download`);
+      if (fallbackRes.ok) {
+        const blob = await fallbackRes.blob();
+        triggerDownload(blob);
+        return;
+      }
+
+      // 3. Fallback to direct client-side @react-pdf/renderer
+      const { pdf } = await import('@react-pdf/renderer');
+      const { ComplianceReportDocument } = await import('@/lib/pdf/report-document');
+      const docElement = React.createElement(ComplianceReportDocument, { report });
+      const blob = await pdf(docElement as unknown as Parameters<typeof pdf>[0]).toBlob();
+      triggerDownload(blob);
+    } catch (err) {
+      console.error('Failed to generate PDF document:', err);
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 animate-fade-in">
-      {/* Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
+    <div className="w-full max-w-4xl mx-auto space-y-8 animate-fade-in print:max-w-none print:p-0 print:space-y-6">
+      {/* Print-specific style overrides ensuring high-contrast, ink-saving, clean document rendering */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 14mm 14mm 14mm 14mm;
+          }
+          body, html {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            font-size: 10.5pt !important;
+            line-height: 1.45 !important;
+          }
+          header, footer, nav, button, .print-hide, .print\\:hidden {
+            display: none !important;
+          }
+          .break-inside-avoid, .print-avoid-break {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      {/* Official Institutional Print Document Header (Visible ONLY on print / PDF output) */}
+      <div className="hidden print:block space-y-4 pb-5 mb-4 border-b-2 border-slate-900 break-inside-avoid">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-700">
+              EUROPEAN UNION • REGULATION (EU) 2024/1689
+            </div>
+            <h1 className="text-2xl font-black text-black tracking-tight">
+              EU AI ACT STATUTORY COMPLIANCE & RISK CLASSIFICATION REPORT
+            </h1>
+            <p className="text-xs text-slate-700 font-sans">
+              Official Artificial Intelligence Act Conformity Assessment Dossier
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <RiskBadge tier={report.risk_tier} size="md" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3 pt-3 text-xs border-t border-slate-300 font-mono">
+          <div>
+            <span className="text-[9px] uppercase text-slate-600 block font-bold">Audit Reference ID</span>
+            <span className="font-bold text-black">{report.id}</span>
+          </div>
+          <div>
+            <span className="text-[9px] uppercase text-slate-600 block font-bold">Audit Date</span>
+            <span className="font-bold text-black">
+              {report.created_at
+                ? new Date(report.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </span>
+          </div>
+          <div>
+            <span className="text-[9px] uppercase text-slate-600 block font-bold">Statutory Basis</span>
+            <span className="font-bold text-black">{report.matched_article}</span>
+          </div>
+          <div>
+            <span className="text-[9px] uppercase text-slate-600 block font-bold">Conformity Status</span>
+            <span className="font-bold text-black">Verified In-Memory</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Header (Hidden on print) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800 print:hidden">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-blue-600 dark:text-blue-400">
             <span>Official Regulatory Audit</span>
             <span aria-hidden="true">·</span>
             <span>Regulation (EU) 2024/1689</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1">
-            EU AI Act Classification Summary
-          </h2>
+          <div className="flex flex-wrap items-center gap-3 mt-1">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              EU AI Act Classification Summary
+            </h2>
+            <RiskBadge tier={report.risk_tier} size="sm" />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Print Report / Browser PDF Trigger */}
+          <button
+            onClick={() => window.print()}
+            type="button"
+            title="Print report or save as PDF using your browser dialog"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 dark:hover:border-slate-600 transition-all cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+            <span>Print Report</span>
+          </button>
+
+          {/* Download PDF Report Button */}
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfDownloading}
+            type="button"
+            title="Download structured EU AI Act compliance PDF report"
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+              pdfDownloaded
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500/50 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20'
+                : 'border-blue-600/40 dark:border-blue-500/40 bg-blue-50/80 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:border-blue-600 dark:hover:border-blue-400'
+            }`}
+          >
+            {pdfDownloading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                <span>Generating PDF...</span>
+              </>
+            ) : pdfDownloaded ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[3]" />
+                <span className="font-bold text-emerald-700 dark:text-emerald-300">PDF Downloaded!</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Download PDF Report</span>
+              </>
+            )}
+          </button>
+
           {/* Copy to Clipboard Button */}
           <button
             onClick={handleCopyToClipboard}
@@ -258,40 +427,43 @@ Verified against official text of Regulation (EU) 2024/1689.
       </div>
 
       {/* Primary Classification Banner */}
-      <RiskBadge tier={report.risk_tier} size="lg" showDescription={true} />
+      <RiskBadge tier={report.risk_tier} size="lg" showDescription={true} className="break-inside-avoid" />
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-1.5 transition-all">
-          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-            Matched Category
-          </span>
-          <p className="text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:grid-cols-3 print:gap-3 break-inside-avoid">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-2 transition-all print:bg-white print:border-slate-300 print:shadow-none print:p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block print:text-slate-600">
+              Matched Category
+            </span>
+            <RiskBadge tier={report.risk_tier} size="sm" />
+          </div>
+          <p className="text-base font-bold text-slate-900 dark:text-slate-100 print:text-black leading-snug">
             {report.matched_category}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-1.5 transition-all">
-          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-2 transition-all print:bg-white print:border-slate-300 print:shadow-none print:p-4">
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block print:text-slate-600">
             Statutory Article Citation
           </span>
-          <p data-testid="matched-article" className="text-base font-bold text-blue-600 dark:text-blue-400 font-mono tracking-tight leading-snug">
+          <p data-testid="matched-article" className="text-base font-bold text-blue-600 dark:text-blue-400 font-mono tracking-tight leading-snug print:text-black">
             {report.matched_article}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-1.5 transition-all">
-          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-2 transition-all print:bg-white print:border-slate-300 print:shadow-none print:p-4">
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block print:text-slate-600">
             Confidence Rating
           </span>
           <div className="flex items-center gap-2 pt-0.5">
             <span
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold ${
                 report.confidence === 'High'
-                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 print:text-black print:border-slate-400'
                   : report.confidence === 'Medium'
-                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-                  : 'bg-slate-500/10 text-slate-700 dark:text-slate-400 border border-slate-500/20'
+                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 print:text-black print:border-slate-400'
+                  : 'bg-slate-500/10 text-slate-700 dark:text-slate-400 border border-slate-500/20 print:text-black print:border-slate-400'
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -302,38 +474,102 @@ Verified against official text of Regulation (EU) 2024/1689.
       </div>
 
       {/* Executive Rationale Card */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs space-y-3 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600" />
-        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2.5 tracking-tight">
-          <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs space-y-3 relative overflow-hidden print:bg-white print:border-slate-300 print:shadow-none print:p-5 break-inside-avoid">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 print:hidden" />
+        <h3 className="text-base font-bold text-slate-900 dark:text-white print:text-black flex items-center gap-2.5 tracking-tight">
+          <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 print:hidden" />
           <span>Executive Legal & Operational Rationale</span>
         </h3>
-        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
+        <p className="text-sm text-slate-700 dark:text-slate-300 print:text-slate-800 leading-relaxed font-normal">
           {report.rationale}
         </p>
       </div>
 
+      {/* EU AI Act 4-Tier Regulatory Risk Classification Framework */}
+      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs space-y-4 print:bg-white print:border-slate-300 print:shadow-none print:p-5 break-inside-avoid">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80 print:border-slate-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 print:hidden">
+              <Scale className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white print:text-black tracking-tight">
+                EU AI Act 4-Tier Regulatory Risk Framework
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-600">
+                Official statutory classification taxonomy established under Regulation (EU) 2024/1689
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 print:text-black">Assigned Status:</span>
+            <RiskBadge tier={report.risk_tier} size="sm" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {(['Unacceptable', 'High', 'Limited', 'Minimal'] as const).map((tierKey) => {
+            const isCurrent = report.risk_tier === tierKey;
+            return (
+              <div
+                key={tierKey}
+                className={`rounded-xl p-3.5 border transition-all flex flex-col justify-between gap-2.5 ${
+                  isCurrent
+                    ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-500 dark:border-blue-400 shadow-xs ring-2 ring-blue-500/20 print:bg-white print:border-black print:ring-0'
+                    : 'bg-slate-50/50 dark:bg-slate-950/30 border-slate-200/80 dark:border-slate-800/80 opacity-80 hover:opacity-100 print:opacity-100 print:bg-white print:border-slate-300'
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-1">
+                    <RiskBadge tier={tierKey} size="sm" />
+                    {isCurrent && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.5 rounded print:text-black print:bg-slate-100">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Active</span>
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 print:text-slate-700 leading-snug">
+                    {tierKey === 'Unacceptable' && 'Article 5 banned cognitive/biometric behavioral exploitation practices.'}
+                    {tierKey === 'High' && 'Annex III critical infrastructure, employment, credit, biometric, and safety systems.'}
+                    {tierKey === 'Limited' && 'Article 50 user notification, deepfake watermarking, and conversational AI disclosure.'}
+                    {tierKey === 'Minimal' && 'Permitted with no mandatory compliance duties (spam filters, games, internal utilities).'}
+                  </p>
+                </div>
+                <div className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 print:text-slate-600 border-t border-slate-200/50 dark:border-slate-800/60 print:border-slate-200 pt-1.5">
+                  {tierKey === 'Unacceptable' && 'Statutory Prohibition'}
+                  {tierKey === 'High' && 'Mandatory Conformity'}
+                  {tierKey === 'Limited' && 'Transparency Only'}
+                  {tierKey === 'Minimal' && 'Unrestricted Use'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Statutory Obligations & Compliance Matrix */}
       {report.obligations && report.obligations.length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs space-y-5 print:bg-white print:border-slate-300 print:shadow-none print:p-5 break-inside-avoid">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80 print:border-slate-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 print:hidden">
                 <ListChecks className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white print:text-black tracking-tight">
                   Statutory Obligations Matrix
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-600">
                   Direct statutory duties identified under {report.matched_article}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <span className="px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 font-mono text-xs font-bold border border-blue-500/20">
-                {report.obligations.length} Obligations Identified
+            <div className="flex items-center gap-2">
+              <RiskBadge tier={report.risk_tier} size="sm" />
+              <span className="px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 print:text-black font-mono text-xs font-bold border border-blue-500/20 print:border-slate-300">
+                {report.obligations.length} Duties Identified
               </span>
             </div>
           </div>
@@ -343,34 +579,34 @@ Verified against official text of Regulation (EU) 2024/1689.
               <div
                 key={index}
                 data-testid="obligation-item"
-                className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/90 bg-slate-50/50 dark:bg-slate-950/40 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/90 bg-slate-50/50 dark:bg-slate-950/40 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-colors print:bg-white print:border-slate-300 print:text-black print:p-3 break-inside-avoid"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 print:text-black print:bg-slate-200 font-mono text-xs font-bold flex items-center justify-center shrink-0">
                       {index + 1}
                     </span>
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 print:text-black">
                       {item.title}
                     </h4>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/80 px-2 py-0.5 rounded border border-blue-200/60 dark:border-blue-800/60">
+                    <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 print:text-black bg-blue-50 dark:bg-blue-950/80 print:bg-slate-100 px-2 py-0.5 rounded border border-blue-200/60 dark:border-blue-800/60 print:border-slate-300">
                       {item.article}
                     </span>
                     <span
                       data-testid="mandatory-badge"
                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                         item.mandatory
-                          ? 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50'
+                          ? 'bg-red-500/10 text-red-700 dark:text-red-400 print:text-red-800 border border-red-500/20 print:border-red-400'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 print:text-slate-700 border border-slate-200/50 dark:border-slate-700/50 print:border-slate-300'
                       }`}
                     >
                       {item.mandatory ? 'Mandatory' : 'Recommended'}
                     </span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-7.5">
+                <p className="text-xs text-slate-600 dark:text-slate-300 print:text-slate-800 leading-relaxed pl-7.5">
                   {item.description}
                 </p>
               </div>
@@ -379,47 +615,169 @@ Verified against official text of Regulation (EU) 2024/1689.
         </div>
       )}
 
-      {/* Slot for Children (Phase 3 Stripe checkout & fulfillment) */}
-      {children}
-
-      {/* PDF Ready State & Account Upgrade Upsell */}
-      {report.pdf_ready ? (
-        <div className="space-y-6">
-          <div className="rounded-3xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-50/70 to-emerald-50/20 dark:from-emerald-950/30 dark:to-emerald-950/10 p-6 sm:p-8 text-center space-y-5 shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center shadow-xs">
-              <CheckCircle2 className="w-7 h-7" />
+      {/* Prioritized Action Plan (Rendered if present in report data) */}
+      {report.action_plan && report.action_plan.length > 0 && (
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs space-y-5 print:bg-white print:border-slate-300 print:shadow-none print:p-5 break-inside-avoid">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80 print:border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 print:hidden">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white print:text-black tracking-tight">
+                  Prioritized Remediation Action Plan
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-600">
+                  Step-by-step roadmap for institutional compliance
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5 max-w-lg mx-auto">
-              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                Your Complete Compliance Report is Ready!
-              </h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                Your official PDF audit report has been compiled and emailed to{' '}
-                <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                  {report.receipt_email || 'your receipt email'}
-                </span>
-                .
-              </p>
-            </div>
-            <div className="pt-2">
-              <a
-                data-testid="download-pdf"
-                href={`/api/reports/${report.id}/download`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Official PDF Report</span>
-              </a>
-            </div>
+            <RiskBadge tier={report.risk_tier} size="sm" />
           </div>
 
-          {/* Micro-SaaS Upsell: Permanent Account Conversion */}
-          <AccountUpgrade initialEmail={report.receipt_email} />
+          <div className="grid grid-cols-1 gap-3">
+            {report.action_plan.map((item) => (
+              <div
+                key={item.step}
+                className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/90 bg-slate-50/50 dark:bg-slate-950/40 space-y-2 print:bg-white print:border-slate-300 print:text-black print:p-3 break-inside-avoid"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-mono text-xs font-bold flex items-center justify-center shrink-0 print:bg-slate-800">
+                      {item.step}
+                    </span>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 print:text-black">
+                      {item.title}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300 print:text-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded print:bg-slate-100 border border-slate-200 dark:border-slate-700 print:border-slate-300">
+                      {item.timeframe}
+                    </span>
+                    <span className="font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-700 dark:text-blue-300 print:text-black border border-blue-500/20 print:border-slate-300">
+                      {item.priority} Priority
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 print:text-slate-800 leading-relaxed pl-7.5">
+                  {item.details}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : showCheckout ? (
-        <div data-testid="checkout-element">
+      )}
+
+      {/* Official Attestation & Regulatory Sign-Off Block (Visible ONLY in print / PDF generation) */}
+      <div className="hidden print:block pt-6 border-t-2 border-slate-800 space-y-4 break-inside-avoid">
+        <div className="grid grid-cols-2 gap-8 text-xs">
+          <div className="space-y-4">
+            <span className="font-bold text-slate-900 uppercase tracking-wider block text-[10px]">
+              Compliance Officer / Auditor Sign-Off
+            </span>
+            <div className="border-b border-dotted border-slate-400 h-10" />
+            <div className="flex justify-between text-[10px] text-slate-600 font-mono">
+              <span>Signature: ______________________</span>
+              <span>Date: ____________</span>
+            </div>
+          </div>
+          <div className="space-y-1 text-[11px] text-slate-700 leading-relaxed">
+            <span className="font-bold text-slate-900 uppercase tracking-wider block text-[10px]">
+              Statutory Disclaimer & Scope
+            </span>
+            <p>
+              This report provides a preliminary risk tier classification under Regulation (EU) 2024/1689. Conformity assessments for High-Risk AI systems under Article 43 and Chapter 2 technical documentation (Annex IV) must be maintained and verified prior to placing systems on the EU market.
+            </p>
+          </div>
+        </div>
+        <div className="text-center text-[9px] text-slate-500 pt-3 border-t border-slate-200 font-mono">
+          EU AI Act Statutory Compliance Engine • Assessment ID: {report.id} • Official Journal L 2024/1689
+        </div>
+      </div>
+
+      {/* Quick PDF Download Callout Banner (Hidden on print) */}
+      <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/60 bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50/60 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-slate-900/50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs print:hidden">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 font-mono">
+              @react-pdf/renderer
+            </span>
+            <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              Export Official PDF Compliance Dossier
+            </h4>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Generate an executive-ready A4 PDF document containing full classification analysis, statutory citations, and legal duties.
+          </p>
+        </div>
+
+        <button
+          onClick={handleDownloadPdf}
+          disabled={pdfDownloading}
+          type="button"
+          className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-md hover:shadow-lg transition-all cursor-pointer shrink-0 disabled:opacity-75"
+        >
+          {pdfDownloading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Compiling PDF Document...</span>
+            </>
+          ) : pdfDownloaded ? (
+            <>
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>Document Downloaded!</span>
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              <span>Download PDF Report</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Slot for Children (Phase 3 Stripe checkout & fulfillment) - Hidden in print */}
+      {children && <div className="print:hidden">{children}</div>}
+
+      {/* PDF Ready State, Checkout & Teaser Sections - Hidden in print */}
+      <div className="print:hidden">
+        {report.pdf_ready ? (
+          <div className="space-y-6">
+            <div className="rounded-3xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-50/70 to-emerald-50/20 dark:from-emerald-950/30 dark:to-emerald-950/10 p-6 sm:p-8 text-center space-y-5 shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center shadow-xs">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <div className="space-y-1.5 max-w-lg mx-auto">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Your Complete Compliance Report is Ready!
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Your official PDF audit report has been compiled and emailed to{' '}
+                  <span className="font-semibold text-slate-900 dark:text-white font-mono">
+                    {report.receipt_email || 'your receipt email'}
+                  </span>
+                  .
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href={`/api/reports/${report.id}/download`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="download-pdf"
+                  className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Official PDF Report</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Micro-SaaS Upsell: Permanent Account Conversion */}
+            <AccountUpgrade initialEmail={report.receipt_email} />
+          </div>
+        ) : showCheckout ? (
+          <div data-testid="checkout-element">
           <CheckoutElement
             report={report}
             onPaymentSuccess={(updated) => {
@@ -429,91 +787,97 @@ Verified against official text of Regulation (EU) 2024/1689.
             onCancel={() => setShowCheckout(false)}
           />
         </div>
-      ) : (
-        /* Locked Teaser Section */
-        <div data-testid="blurred-teaser" className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white p-7 sm:p-9 overflow-hidden shadow-2xl">
-          {/* Subtle ambient lighting */}
-          <div className="absolute -right-24 -bottom-24 w-96 h-96 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
-          <div className="absolute -left-24 -top-24 w-96 h-96 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none" />
+        ) : (
+          /* Locked Teaser Section */
+          <div data-testid="blurred-teaser" className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white p-7 sm:p-9 overflow-hidden shadow-2xl">
+            {/* Subtle ambient lighting */}
+            <div className="absolute -right-24 -bottom-24 w-96 h-96 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
+            <div className="absolute -left-24 -top-24 w-96 h-96 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold border border-blue-500/30">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Premium Regulatory Deliverable
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                  Unlock Full Audit PDF & Action Plan
-                </h3>
-              </div>
-              <div className="text-left sm:text-right shrink-0">
-                <div className="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0">
-                  <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">$29</span>
-                  <span className="text-xs text-slate-400 font-medium">one-time investment</span>
+            <div className="relative z-10 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold border border-blue-500/30">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Premium Regulatory Deliverable
+                  </span>
+                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    Unlock Full Audit PDF & Action Plan
+                  </h3>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <div className="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0">
+                    <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">$29</span>
+                    <span className="text-xs text-slate-400 font-medium">one-time investment</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <p className="text-sm text-slate-300 max-w-2xl leading-relaxed font-normal">
-              Do not navigate EU AI Act enforcement in the dark. Unlock the complete, board-ready regulatory audit report complete with article citations, statutory obligations matrix, and prioritized implementation checklist.
-            </p>
+              <p className="text-sm text-slate-300 max-w-2xl leading-relaxed font-normal">
+                Do not navigate EU AI Act enforcement in the dark. Unlock the complete, board-ready regulatory audit report complete with article citations, statutory obligations matrix, and prioritized implementation checklist.
+              </p>
 
-            {/* Checklist items teaser */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
-                <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Complete Articles 9–17 Statutory Obligations Matrix</span>
+              {/* Checklist items teaser */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span>Complete Articles 9–17 Statutory Obligations Matrix</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span>Prioritized 30/60/90-Day Remediation Action Plan</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span>Executive-Ready PDF Signed with Verification Date</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span>Self-Assessment vs. Third-Party Conformity Guide</span>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
-                <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Prioritized 30/60/90-Day Remediation Action Plan</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
-                <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Executive-Ready PDF Signed with Verification Date</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-200 font-medium bg-slate-800/70 p-3.5 rounded-xl border border-slate-700/60 shadow-xs">
-                <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Self-Assessment vs. Third-Party Conformity Guide</span>
-              </div>
-            </div>
 
-            {/* Blurred Preview Teaser */}
-            <div className="relative rounded-2xl bg-slate-950/70 p-5 border border-slate-800 overflow-hidden">
-              <div className="filter blur-[3px] select-none pointer-events-none space-y-2.5 opacity-40">
-                <div className="h-4 bg-slate-600 rounded-md w-3/4" />
-                <div className="h-3 bg-slate-700 rounded-md w-full" />
-                <div className="h-3 bg-slate-700 rounded-md w-5/6" />
-                <div className="h-3 bg-slate-700 rounded-md w-2/3" />
+              {/* Blurred Preview Teaser */}
+              <div className="relative rounded-2xl bg-slate-950/70 p-5 border border-slate-800 overflow-hidden">
+                <div className="filter blur-[3px] select-none pointer-events-none space-y-2.5 opacity-40">
+                  <div className="h-4 bg-slate-600 rounded-md w-3/4" />
+                  <div className="h-3 bg-slate-700 rounded-md w-full" />
+                  <div className="h-3 bg-slate-700 rounded-md w-5/6" />
+                  <div className="h-3 bg-slate-700 rounded-md w-2/3" />
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-[1px]">
+                  <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    Statutory obligations & prioritized action items locked
+                  </span>
+                </div>
               </div>
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-[1px]">
-                <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  Statutory obligations & prioritized action items locked
-                </span>
-              </div>
-            </div>
 
-            {/* Checkout Trigger Action */}
-            <div className="pt-2">
-              <button
-                data-testid="checkout-cta"
-                type="button"
-                onClick={() => {
-                  setShowCheckout(true);
-                  onInitiateCheckout?.();
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-sm shadow-xl shadow-blue-600/25 hover:shadow-blue-600/40 transition-all cursor-pointer"
-              >
-                <Lock className="w-4 h-4" />
-                <span>Unlock Full Audit PDF Report ($29)</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {/* Checkout Trigger Action */}
+              <div className="pt-2">
+                <button
+                  data-testid="checkout-cta"
+                  type="button"
+                  onClick={() => {
+                    setShowCheckout(true);
+                    onInitiateCheckout?.();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-sm shadow-xl shadow-blue-600/25 hover:shadow-blue-600/40 transition-all cursor-pointer"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Unlock Full Audit PDF Report ($29)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Interactive Regulatory FAQ Section Toggle (Hidden in print) */}
+      <div className="print:hidden">
+        <FaqSection />
+      </div>
     </div>
   );
 }
