@@ -1,11 +1,20 @@
 import { GoogleGenAI } from '@google/genai';
 import { getSystemPrompt, formatUserPrompt } from './prompts';
 import {
-  complianceReportSchema,
+  complianceChecklistGenAiSchema,
+  complianceChecklistZodSchema,
+  CHECKLIST_METADATA,
+  type ComplianceChecklist,
   type ClassificationResult,
   type RiskTier,
   type ConfidenceLevel,
 } from './schema';
+import {
+  evaluateComplianceChecklist,
+  normalizeChecklist,
+} from '@/lib/rules/engine';
+
+export type { ClassificationResult, RiskTier, ConfidenceLevel };
 
 /**
  * Checks if mock Gemini mode is active (due to explicit env or missing/placeholder API key).
@@ -22,408 +31,334 @@ export function isMockGeminiEnabled(): boolean {
 }
 
 /**
+ * Extracts a statutory boolean checklist deterministically from input text based on regulatory triggers.
+ * Used for testing, offline evaluation, and fallback mock mode with 100% parity to the live engine.
+ */
+export function extractMockChecklist(inputPrompt: string): ComplianceChecklist {
+  const normalized = inputPrompt.toLowerCase();
+  const checklist = {} as Record<keyof ComplianceChecklist, boolean>;
+  const allKeys = Object.keys(CHECKLIST_METADATA) as (keyof ComplianceChecklist)[];
+  for (const k of allKeys) {
+    checklist[k] = false;
+  }
+
+  // =========================================================================
+  // Article 5: Prohibited Practices
+  // =========================================================================
+  if (normalized.includes('subliminal') || normalized.includes('manipulat')) {
+    checklist.article_5_subliminal_manipulation = true;
+  }
+  if (
+    normalized.includes('vulnerability exploitation') ||
+    normalized.includes('exploit children') ||
+    normalized.includes('exploit elderly') ||
+    normalized.includes('exploit disability')
+  ) {
+    checklist.article_5_vulnerability_exploitation = true;
+  }
+  if (normalized.includes('social scoring') || normalized.includes('social score')) {
+    checklist.article_5_social_scoring = true;
+  }
+  if (
+    normalized.includes('predict criminal offense') ||
+    normalized.includes('pre-crime') ||
+    normalized.includes('predict crime') ||
+    normalized.includes('criminal risk profiling')
+  ) {
+    checklist.article_5_criminal_risk_profiling = true;
+  }
+  if (
+    normalized.includes('facial scraping') ||
+    normalized.includes('untargeted scraping') ||
+    normalized.includes('cctv scraping')
+  ) {
+    checklist.article_5_untargeted_facial_scraping = true;
+  }
+  if (
+    normalized.includes('emotion recognition in workplace') ||
+    normalized.includes('emotion recognition in school') ||
+    normalized.includes('workplace emotion') ||
+    normalized.includes('classroom emotion')
+  ) {
+    checklist.article_5_workplace_education_emotion_recognition = true;
+  }
+  if (
+    normalized.includes('racial categorization') ||
+    normalized.includes('political biometric') ||
+    normalized.includes('sexual orientation biometric') ||
+    normalized.includes('biometric categorization sensitive')
+  ) {
+    checklist.article_5_biometric_categorization_sensitive = true;
+  }
+  if (
+    normalized.includes('real-time remote biometric') ||
+    normalized.includes('public biometric identification') ||
+    normalized.includes('cctv facial recognition')
+  ) {
+    checklist.article_5_real_time_remote_biometric_enforcement = true;
+  }
+
+  // =========================================================================
+  // Annex III: High-Risk AI Systems
+  // =========================================================================
+
+  // Category 1: Biometrics
+  if (
+    normalized.includes('remote biometric') ||
+    normalized.includes('facial recognition') ||
+    normalized.includes('biometric identification')
+  ) {
+    if (!checklist.article_5_real_time_remote_biometric_enforcement) {
+      checklist.annex_iii_biometrics_remote_identification = true;
+    }
+  }
+  if (
+    normalized.includes('biometric categorization') &&
+    !checklist.article_5_biometric_categorization_sensitive
+  ) {
+    checklist.annex_iii_biometrics_categorization = true;
+  }
+  if (
+    (normalized.includes('emotion recognition') || normalized.includes('face emotion')) &&
+    !checklist.article_5_workplace_education_emotion_recognition
+  ) {
+    checklist.annex_iii_biometrics_emotion_recognition = true;
+  }
+
+  // Category 2: Critical Infrastructure
+  if (
+    normalized.includes('critical infrastructure') ||
+    normalized.includes('traffic control') ||
+    normalized.includes('water supply') ||
+    normalized.includes('power grid') ||
+    normalized.includes('gas distribution') ||
+    normalized.includes('electricity grid')
+  ) {
+    checklist.annex_iii_critical_infrastructure_safety_components = true;
+  }
+
+  // Category 3: Education
+  if (
+    normalized.includes('admission') ||
+    normalized.includes('assign student') ||
+    normalized.includes('school application') ||
+    normalized.includes('university entrance')
+  ) {
+    checklist.annex_iii_education_admission_assignment = true;
+  }
+  if (
+    normalized.includes('student evaluation') ||
+    normalized.includes('grading test') ||
+    normalized.includes('learning outcome') ||
+    normalized.includes('assess student')
+  ) {
+    checklist.annex_iii_education_learning_evaluation = true;
+  }
+  if (
+    normalized.includes('education level') ||
+    normalized.includes('vocational placement') ||
+    normalized.includes('education assessment')
+  ) {
+    checklist.annex_iii_education_level_assessment = true;
+  }
+  if (
+    normalized.includes('exam proctoring') ||
+    normalized.includes('cheating detection') ||
+    normalized.includes('proctoring') ||
+    normalized.includes('behavior during test')
+  ) {
+    checklist.annex_iii_education_behavior_monitoring = true;
+  }
+
+  // Category 4: Employment
+  if (
+    normalized.includes('cv') ||
+    normalized.includes('resume') ||
+    normalized.includes('hiring') ||
+    normalized.includes('recruitment') ||
+    normalized.includes('job applicant') ||
+    normalized.includes('screening candidate') ||
+    normalized.includes('candidate selection')
+  ) {
+    checklist.annex_iii_employment_recruitment_screening = true;
+  }
+  if (
+    normalized.includes('promotion') ||
+    normalized.includes('task allocation') ||
+    normalized.includes('worker monitoring') ||
+    normalized.includes('performance evaluation') ||
+    normalized.includes('workplace decision') ||
+    normalized.includes('fire employee') ||
+    normalized.includes('terminate employee')
+  ) {
+    checklist.annex_iii_employment_workplace_decisions = true;
+  }
+
+  // Category 5: Essential Services
+  if (
+    normalized.includes('public assistance') ||
+    normalized.includes('social welfare benefit') ||
+    normalized.includes('housing benefit')
+  ) {
+    checklist.annex_iii_essential_services_public_benefits = true;
+  }
+  if (
+    normalized.includes('creditworthiness') ||
+    normalized.includes('credit score') ||
+    normalized.includes('credit scoring') ||
+    normalized.includes('loan underwriting')
+  ) {
+    checklist.annex_iii_essential_services_credit_scoring = true;
+  }
+  if (
+    normalized.includes('emergency dispatch') ||
+    normalized.includes('emergency call') ||
+    normalized.includes('911 dispatch') ||
+    normalized.includes('112 dispatch') ||
+    normalized.includes('ambulance dispatch')
+  ) {
+    checklist.annex_iii_essential_services_emergency_dispatch = true;
+  }
+  if (
+    normalized.includes('life insurance') ||
+    normalized.includes('health insurance') ||
+    normalized.includes('insurance underwriting') ||
+    normalized.includes('insurance pricing')
+  ) {
+    checklist.annex_iii_essential_services_health_life_insurance = true;
+  }
+
+  // Category 6: Law Enforcement
+  if (
+    normalized.includes('victim risk') ||
+    normalized.includes('risk of victim')
+  ) {
+    checklist.annex_iii_law_enforcement_victim_risk_assessment = true;
+  }
+  if (
+    normalized.includes('polygraph') ||
+    normalized.includes('lie detector')
+  ) {
+    checklist.annex_iii_law_enforcement_polygraph = true;
+  }
+  if (
+    normalized.includes('evidence reliability') ||
+    normalized.includes('reliability of evidence')
+  ) {
+    checklist.annex_iii_law_enforcement_evidence_reliability = true;
+  }
+  if (
+    normalized.includes('offending risk') ||
+    normalized.includes('reoffending')
+  ) {
+    checklist.annex_iii_law_enforcement_offending_risk_profiling = true;
+  }
+  if (
+    normalized.includes('criminal profiling') ||
+    normalized.includes('law enforcement profiling')
+  ) {
+    checklist.annex_iii_law_enforcement_criminal_profiling = true;
+  }
+
+  // Category 7: Migration
+  if (normalized.includes('border polygraph')) {
+    checklist.annex_iii_migration_polygraph = true;
+  }
+  if (
+    normalized.includes('border control') ||
+    normalized.includes('migration risk') ||
+    normalized.includes('irregular entry') ||
+    normalized.includes('border security')
+  ) {
+    checklist.annex_iii_migration_risk_assessment = true;
+  }
+  if (
+    normalized.includes('document verification') ||
+    normalized.includes('passport verification') ||
+    normalized.includes('travel document') ||
+    normalized.includes('fake id detection')
+  ) {
+    checklist.annex_iii_migration_document_verification = true;
+  }
+  if (
+    normalized.includes('asylum application') ||
+    normalized.includes('visa evaluation') ||
+    normalized.includes('residence permit') ||
+    normalized.includes('asylum examination')
+  ) {
+    checklist.annex_iii_migration_asylum_examination = true;
+  }
+
+  // Category 8: Justice & Democracy
+  if (
+    normalized.includes('court') ||
+    normalized.includes('judge') ||
+    normalized.includes('sentencing') ||
+    normalized.includes('dispute resolution') ||
+    normalized.includes('judicial')
+  ) {
+    checklist.annex_iii_justice_judicial_assistance = true;
+  }
+  if (
+    normalized.includes('election') ||
+    normalized.includes('referendum') ||
+    normalized.includes('voting behavior') ||
+    normalized.includes('voter influencing')
+  ) {
+    checklist.annex_iii_justice_election_influencing = true;
+  }
+
+  // =========================================================================
+  // Article 50: Limited Risk
+  // =========================================================================
+  if (
+    normalized.includes('chatbot') ||
+    normalized.includes('conversational') ||
+    normalized.includes('virtual assistant') ||
+    normalized.includes('voice assistant') ||
+    normalized.includes('customer service bot') ||
+    normalized.includes('support agent')
+  ) {
+    checklist.article_50_conversational_chatbot = true;
+  }
+  if (
+    normalized.includes('deepfake') ||
+    normalized.includes('synthetic media') ||
+    normalized.includes('generate image') ||
+    normalized.includes('generate video') ||
+    normalized.includes('generate audio') ||
+    normalized.includes('generative ai') ||
+    normalized.includes('voice clone') ||
+    normalized.includes('avatar')
+  ) {
+    checklist.article_50_synthetic_media_deepfakes = true;
+  }
+  if (
+    normalized.includes('emotion notice') ||
+    normalized.includes('biometric notice') ||
+    (normalized.includes('emotion') &&
+      !checklist.article_5_workplace_education_emotion_recognition &&
+      !checklist.annex_iii_biometrics_emotion_recognition)
+  ) {
+    checklist.article_50_emotion_biometric_notice = true;
+  }
+
+  return checklist;
+}
+
+/**
  * Deterministic, intelligent mock classifier for testing and environments without an API key.
- * Analyzes keywords in the input prompt to accurately reflect EU AI Act risk categorizations.
+ * Extracts boolean checklist via deterministic rules and processes it with the legal rule engine.
  */
 export function generateMockClassification(inputPrompt: string): ClassificationResult {
-  const normalized = inputPrompt.toLowerCase();
-
-  // 1. Check for Unacceptable Risk (Article 5 Prohibitions)
-  const prohibitedTriggers = [
-    'subliminal',
-    'manipulat',
-    'social scoring',
-    'social score',
-    'vulnerability exploitation',
-    'exploit children',
-    'racial categorization',
-    'facial scraping',
-    'untargeted scraping',
-    'cctv scraping',
-    'emotion recognition in workplace',
-    'emotion recognition in school',
-    'workplace emotion',
-    'classroom emotion',
-    'predict criminal offense',
-    'pre-crime',
-    'predict crime',
-  ];
-
-  const matchedProhibited = prohibitedTriggers.some((trigger) =>
-    normalized.includes(trigger)
-  );
-
-  if (matchedProhibited) {
-    return {
-      risk_tier: 'Unacceptable',
-      matched_category: 'Prohibited AI Practices (Article 5)',
-      matched_article: 'Article 5(1)',
-      confidence: 'High',
-      rationale:
-        "The evaluated system description includes functional characteristics that materially manipulate human behavior, perform prohibited biometric inferences, or implement social scoring. Under Article 5 of Regulation (EU) 2024/1689, deploying systems with these capabilities poses unacceptable fundamental rights risks and is strictly prohibited in the EU.",
-      obligations: [
-        {
-          title: 'Prohibition from Placement on Market',
-          article: 'Article 5',
-          description:
-            'The commercial deployment, placing on the market, or putting into service of this AI capability is strictly prohibited across all EU Member States.',
-          mandatory: true,
-        },
-        {
-          title: 'Immediate Cease and Decommission',
-          article: 'Article 5',
-          description:
-            'Immediately discontinue development and operational use within EU jurisdiction to prevent severe statutory penalties of up to €35M or 7% of worldwide turnover.',
-          mandatory: true,
-        },
-      ],
-      action_plan: [
-        {
-          step: 1,
-          title: 'Halt EU Market Deployment',
-          timeframe: 'Immediate (0 - 7 days)',
-          priority: 'Immediate',
-          details:
-            'Cease any live user-facing operations or EU marketing initiatives for this feature set to eliminate imminent regulatory enforcement exposure.',
-        },
-        {
-          step: 2,
-          title: 'Architectural & Feature De-scoping',
-          timeframe: '7 - 30 days',
-          priority: 'Immediate',
-          details:
-            'Perform a technical audit to strip out prohibited manipulation, social scoring, or unauthorized emotion recognition mechanisms from the application pipeline.',
-        },
-        {
-          step: 3,
-          title: 'Independent Fundamental Rights Audit',
-          timeframe: '30 - 60 days',
-          priority: 'Short-term',
-          details:
-            'Engage qualified EU AI regulatory counsel to conduct a formal compliance review on the re-architected system prior to any future release.',
-        },
-      ],
-    };
-  }
-
-  // 2. Check for High Risk (Annex III Standalone Categories)
-  const employmentTriggers = [
-    'cv',
-    'resume',
-    'hiring',
-    'recruitment',
-    'job applicant',
-    'screening candidates',
-    'candidate selection',
-    'promotion',
-    'task allocation',
-    'worker monitoring',
-    'performance evaluation',
-  ];
-  const essentialServicesTriggers = [
-    'creditworthiness',
-    'credit score',
-    'credit scoring',
-    'loan underwriting',
-    'life insurance',
-    'health insurance',
-    'emergency dispatch',
-    'emergency call',
-    'public assistance',
-  ];
-  const educationTriggers = [
-    'admission',
-    'student evaluation',
-    'exam proctoring',
-    'grading test',
-    'educational assessment',
-  ];
-  const biometricsTriggers = [
-    'remote biometric',
-    'facial recognition',
-    'biometric identification',
-    'biometric categorization',
-  ];
-  const criticalInfraTriggers = [
-    'critical infrastructure',
-    'traffic control',
-    'water supply',
-    'power grid',
-    'gas distribution',
-  ];
-  const lawEnforcementJusticeTriggers = [
-    'law enforcement',
-    'polygraph',
-    'border control',
-    'asylum application',
-    'visa evaluation',
-    'court',
-    'sentencing',
-    'judge',
-  ];
-
-  let highRiskCategory = '';
-  if (employmentTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Employment & Workers Management (Annex III Point 4)';
-  } else if (essentialServicesTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Essential Private & Public Services (Annex III Point 5)';
-  } else if (educationTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Education & Vocational Training (Annex III Point 3)';
-  } else if (biometricsTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Biometrics & Identification (Annex III Point 1)';
-  } else if (criticalInfraTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Critical Infrastructure (Annex III Point 2)';
-  } else if (lawEnforcementJusticeTriggers.some((t) => normalized.includes(t))) {
-    highRiskCategory = 'Law Enforcement & Justice (Annex III Points 6-8)';
-  }
-
-  if (highRiskCategory) {
-    return {
-      risk_tier: 'High',
-      matched_category: highRiskCategory,
-      matched_article: 'Article 6(2) & Annex III',
-      confidence: 'High',
-      rationale:
-        "The evaluated system automates profiling, ranking, or decision-making in a sensitive societal domain identified in Annex III. Pursuant to Article 6(2) of Regulation (EU) 2024/1689, AI systems operating in employment selection, essential service provision, or biometric identification are classified as High-Risk and subject to rigorous pre-market conformity requirements.",
-      obligations: [
-        {
-          title: 'Risk Management System',
-          article: 'Article 9',
-          description:
-            'Establish, implement, document, and maintain a continuous risk management system throughout the entire system lifecycle.',
-          mandatory: true,
-        },
-        {
-          title: 'Data Governance & Bias Controls',
-          article: 'Article 10',
-          description:
-            'Ensure training, validation, and testing datasets meet high quality criteria, represent relevant target populations, and undergo statistical bias audits.',
-          mandatory: true,
-        },
-        {
-          title: 'Technical Documentation',
-          article: 'Article 11',
-          description:
-            'Compile and maintain comprehensive technical documentation in accordance with Annex IV prior to market placement.',
-          mandatory: true,
-        },
-        {
-          title: 'Automatic Event Logging',
-          article: 'Article 12',
-          description:
-            'Enable automatic recording of events (logging) during operation to maintain an auditable traceability trail.',
-          mandatory: true,
-        },
-        {
-          title: 'Transparency & User Information',
-          article: 'Article 13',
-          description:
-            'Provide deployers with concise, clear, and comprehensive instructions for use, detailing system specifications and limitations.',
-          mandatory: true,
-        },
-        {
-          title: 'Human Oversight Controls',
-          article: 'Article 14',
-          description:
-            'Incorporate human-in-the-loop interfaces enabling qualified operators to review, override, or halt automated recommendations.',
-          mandatory: true,
-        },
-        {
-          title: 'Accuracy, Robustness & Cybersecurity',
-          article: 'Article 15',
-          description:
-            'Design the system to achieve consistent accuracy, resilience against adversarial manipulation, and cybersecurity protection.',
-          mandatory: true,
-        },
-        {
-          title: 'EU Database Registration',
-          article: 'Article 49 & 71',
-          description:
-            'Complete mandatory registration of the high-risk AI system in the official EU centralized database before commercial operation.',
-          mandatory: true,
-        },
-      ],
-      action_plan: [
-        {
-          step: 1,
-          title: 'Algorithmic Bias & Impact Audit',
-          timeframe: '0 - 30 days',
-          priority: 'Immediate',
-          details:
-            'Analyze underlying training datasets and scoring models for disparate impact or unintended demographic bias.',
-        },
-        {
-          step: 2,
-          title: 'Operationalize Article 9 Risk Management',
-          timeframe: '30 - 60 days',
-          priority: 'Immediate',
-          details:
-            'Document known risks, foreseeable misuse scenarios, and corresponding risk mitigation controls into a centralized compliance register.',
-        },
-        {
-          step: 3,
-          title: 'Build Human Oversight & Logging Architecture',
-          timeframe: '60 - 90 days',
-          priority: 'Short-term',
-          details:
-            'Implement reviewer override controls, explanation interfaces, and tamper-resistant audit event logs.',
-        },
-        {
-          step: 4,
-          title: 'Compile Annex IV Dossier & EU Registration',
-          timeframe: '90 - 180 days',
-          priority: 'Medium-term',
-          details:
-            'Finalize technical documentation dossier and complete registration in the EU high-risk AI database before entering the EU market.',
-        },
-      ],
-    };
-  }
-
-  // 3. Check for Limited Risk (Article 50 Transparency Obligations)
-  const limitedTriggers = [
-    'chatbot',
-    'conversational',
-    'virtual assistant',
-    'customer support bot',
-    'support agent',
-    'deepfake',
-    'synthetic media',
-    'synthetic voice',
-    'voice clone',
-    'avatar',
-    'synthetic video',
-    'content generation',
-  ];
-
-  const matchedLimited = limitedTriggers.some((trigger) =>
-    normalized.includes(trigger)
-  );
-
-  if (matchedLimited) {
-    return {
-      risk_tier: 'Limited',
-      matched_category: 'Conversational AI & Synthetic Media (Article 50)',
-      matched_article: 'Article 50(1)',
-      confidence: 'High',
-      rationale:
-        "The evaluated system interacts directly with natural persons or creates synthetic content without triggering high-risk or prohibited domains. Under Article 50 of the EU AI Act, transparency obligations mandate informing users that they are interacting with an AI system and providing clear synthetic content disclosures.",
-      obligations: [
-        {
-          title: 'AI Interaction Disclosure',
-          article: 'Article 50(1)',
-          description:
-            'Inform natural persons in a clear, visible, and timely manner that they are communicating directly with an artificial intelligence system.',
-          mandatory: true,
-        },
-        {
-          title: 'Synthetic Media Labelling',
-          article: 'Article 50(2)',
-          description:
-            'Ensure all generated synthetic audio, image, or video outputs are marked in a machine-readable format and visibly disclosed as artificially produced.',
-          mandatory: true,
-        },
-      ],
-      action_plan: [
-        {
-          step: 1,
-          title: 'Implement User Interface AI Disclosure',
-          timeframe: '0 - 14 days',
-          priority: 'Immediate',
-          details:
-            'Add explicit visual badges, initial conversational greetings, and modal disclaimers confirming the AI nature of the assistant.',
-        },
-        {
-          step: 2,
-          title: 'Machine-Readable Watermarking Integration',
-          timeframe: '14 - 30 days',
-          priority: 'Short-term',
-          details:
-            'Embed industry standard provenance metadata (such as C2PA) and visible watermarks into any generated synthetic media outputs.',
-        },
-        {
-          step: 3,
-          title: 'Update Terms of Service & Privacy Policy',
-          timeframe: '30 - 60 days',
-          priority: 'Medium-term',
-          details:
-            'Revise customer terms and service documentation to outline AI capabilities, limitations, and user interaction notices.',
-        },
-      ],
-    };
-  }
-
-  // 4. Default: Minimal Risk
-  return {
-    risk_tier: 'Minimal',
-    matched_category: 'General AI / Minimal Risk Application',
-    matched_article: 'Article 69 / Voluntary Codes of Conduct',
-    confidence: 'High',
-    rationale:
-      "The described system performs standard automated or computational tasks (such as filtering, data optimization, or internal analytics) that do not fall within Article 5 prohibitions, Annex III high-risk use cases, or Article 50 transparency mandates. It represents minimal to no risk to European citizens' safety or fundamental rights.",
-    obligations: [
-      {
-        title: 'Organizational AI Literacy',
-        article: 'Article 4',
-        description:
-          'Ensure technical and operational staff possess a baseline level of AI literacy considering their operational context.',
-        mandatory: true,
-      },
-      {
-        title: 'Voluntary Code of Conduct Adherence',
-        article: 'Article 69',
-        description:
-          'Encouraged to voluntarily adhere to ethical AI codes of conduct fostering trustworthy and transparent artificial intelligence.',
-        mandatory: false,
-      },
-    ],
-    action_plan: [
-      {
-        step: 1,
-        title: 'AI Literacy Staff Briefing',
-        timeframe: '0 - 30 days',
-        priority: 'Short-term',
-        details:
-          'Conduct internal briefings on basic AI literacy and data stewardship principles in accordance with Article 4 requirements.',
-      },
-      {
-        step: 2,
-        title: 'Periodic Feature Scope Monitoring',
-        timeframe: '60 - 180 days',
-        priority: 'Medium-term',
-        details:
-          'Establish periodic internal check-ins to ensure upcoming system updates or new integrations do not inadvertently expand into Annex III high-risk categories.',
-      },
-    ],
-  };
+  const checklist = extractMockChecklist(inputPrompt);
+  return evaluateComplianceChecklist(checklist);
 }
 
 /**
- * Normalizes risk tier values to enforce exact casing.
- */
-function normalizeRiskTier(rawTier?: string): RiskTier {
-  if (!rawTier) return 'Minimal';
-  const lower = rawTier.toLowerCase();
-  if (lower === 'unacceptable') return 'Unacceptable';
-  if (lower === 'high') return 'High';
-  if (lower === 'limited') return 'Limited';
-  return 'Minimal';
-}
-
-/**
- * Normalizes confidence levels.
- */
-function normalizeConfidence(rawConfidence?: string): ConfidenceLevel {
-  if (!rawConfidence) return 'Medium';
-  const lower = rawConfidence.toLowerCase();
-  if (lower === 'high') return 'High';
-  if (lower === 'low') return 'Low';
-  return 'Medium';
-}
-
-/**
- * Classifies an AI system description against the EU AI Act using Google Gemini.
- * Falls back to deterministic mock classification when API keys are not provided or in testing.
+ * Classifies an AI system description against the EU AI Act using a robust two-step pipeline:
+ * Step 1: Extract statutory boolean checklist from Gemini LLM using strict boolean responseSchema.
+ * Step 2: Validate boolean checklist via Zod and pass into deterministic legal rule engine.
  *
  * @param inputPrompt The user's system prompt or functional architecture description.
  * @returns Structured ClassificationResult matching the EU AI Act risk tiers and obligations.
@@ -473,7 +408,7 @@ export async function classifySystemPrompt(
       config: {
         systemInstruction: getSystemPrompt(),
         responseMimeType: 'application/json',
-        responseSchema: complianceReportSchema,
+        responseSchema: complianceChecklistGenAiSchema,
       },
     });
 
@@ -484,7 +419,10 @@ export async function classifySystemPrompt(
 
     // Check safety finish reason
     const candidate = response.candidates?.[0];
-    if (candidate?.finishReason && ['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT'].includes(candidate.finishReason)) {
+    if (
+      candidate?.finishReason &&
+      ['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT'].includes(candidate.finishReason)
+    ) {
       throw new Error(
         `Analysis blocked by AI safety filters (${candidate.finishReason}). Please modify your system description to exclude sensitive terms.`
       );
@@ -508,46 +446,31 @@ export async function classifySystemPrompt(
       parsed = JSON.parse(cleanJson) as Record<string, unknown>;
     } catch (parseErr) {
       throw new Error(
-        `Failed to parse Gemini output as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+        `Failed to parse Gemini output as JSON: ${
+          parseErr instanceof Error ? parseErr.message : String(parseErr)
+        }`
       );
     }
 
-    // Sanitize and ensure full typed structure
-    const result: ClassificationResult = {
-      risk_tier: normalizeRiskTier(typeof parsed.risk_tier === 'string' ? parsed.risk_tier : undefined),
-      matched_category: String(parsed.matched_category || 'General AI System'),
-      matched_article: String(parsed.matched_article || 'Regulation (EU) 2024/1689'),
-      confidence: normalizeConfidence(typeof parsed.confidence === 'string' ? parsed.confidence : undefined),
-      rationale: String(parsed.rationale || 'Classification determined based on EU AI Act provisions.'),
-      obligations: Array.isArray(parsed.obligations)
-        ? (parsed.obligations as Record<string, unknown>[]).map((item) => ({
-            title: String(item.title || 'Statutory Requirement'),
-            article: String(item.article || 'EU AI Act'),
-            description: String(item.description || ''),
-            mandatory: Boolean(item.mandatory),
-          }))
-        : [],
-      action_plan: Array.isArray(parsed.action_plan)
-        ? (parsed.action_plan as Record<string, unknown>[]).map((item, idx) => ({
-            step: typeof item.step === 'number' ? item.step : idx + 1,
-            title: String(item.title || `Compliance Step ${idx + 1}`),
-            timeframe: String(item.timeframe || '30 - 60 days'),
-            priority:
-              item.priority === 'Immediate' || item.priority === 'Short-term' || item.priority === 'Medium-term'
-                ? item.priority
-                : 'Short-term',
-            details: String(item.details || ''),
-          }))
-        : [],
-    };
+    // Resilient validation: Validate with Zod schema, defaulting missing/invalid keys to false
+    const parsedZod = complianceChecklistZodSchema.safeParse(parsed);
+    const checklist: ComplianceChecklist = parsedZod.success
+      ? parsedZod.data
+      : normalizeChecklist(parsed as Partial<ComplianceChecklist>);
 
-    return result;
+    // Deterministic Rule Engine evaluation
+    return evaluateComplianceChecklist(checklist);
   } catch (err: unknown) {
     if (timeoutId) clearTimeout(timeoutId);
-    // If it is already a descriptive error we created, rethrow
     if (err instanceof Error) {
       throw err;
     }
     throw new Error(`Gemini classification error: ${String(err)}`);
   }
 }
+
+/**
+ * Backward compatibility alias for classifySystemPrompt.
+ */
+export const analyzeCompliance = classifySystemPrompt;
+
