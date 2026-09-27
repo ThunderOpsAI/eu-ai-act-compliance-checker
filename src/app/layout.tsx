@@ -15,7 +15,40 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://euaipass.com"),
   title: "EU AI Pass | EU AI Act Compliance Checker",
-  description: "Instant AI risk tier classification and regulatory compliance reporting under the EU AI Act.",
+  description:
+    "Instant EU AI Act risk tier classification in 3 minutes. Zero data retention. Get your full statutory obligations audit PDF for $29 — instead of $5,000 in legal fees.",
+  keywords: [
+    "EU AI Act compliance",
+    "Regulation EU 2024 1689",
+    "AI risk classification",
+    "AI Act checker",
+    "GPAI compliance",
+    "Annex III",
+    "high risk AI",
+  ],
+  openGraph: {
+    type: "website",
+    url: "https://euaipass.com",
+    title: "EU AI Pass | EU AI Act Compliance Checker",
+    description:
+      "Classify your AI system against Regulation (EU) 2024/1689 in 3 minutes. Zero data retention. Full PDF audit report for $29.",
+    siteName: "EU AI Pass",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "EU AI Act Compliance Checker — Instant Risk Tier Classification",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "EU AI Pass | EU AI Act Compliance Checker",
+    description:
+      "Classify your AI system against the EU AI Act in 3 minutes. Zero data retention. Full PDF audit report for $29.",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({

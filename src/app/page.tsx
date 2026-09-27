@@ -202,8 +202,28 @@ export default function HomePage() {
             <span>• Regulation (EU) 2024/1689</span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <span>Last verified against the Act: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-5 text-center">
+            <a
+              href="/privacy"
+              className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="/terms"
+              className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
+            >
+              Terms of Service
+            </a>
+            <a
+              href="mailto:support@euaipass.com"
+              className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              support@euaipass.com
+            </a>
+            <span className="text-slate-400 dark:text-slate-600">
+              © {new Date().getFullYear()} EU AI Pass
+            </span>
           </div>
         </div>
       </footer>

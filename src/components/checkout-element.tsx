@@ -20,6 +20,7 @@ export function CheckoutElement({
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   async function handleCheckout(e: React.FormEvent) {
     e.preventDefault();
@@ -28,6 +29,11 @@ export function CheckoutElement({
     const cleanEmail = email.trim();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setError('Please provide a valid email address for receipt and report delivery.');
+      return;
+    }
+
+    if (!agreedToTerms) {
+      setError('Please agree to the Terms of Service and Privacy Policy to continue.');
       return;
     }
 
@@ -158,10 +164,46 @@ export function CheckoutElement({
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-medium">
+            <div data-testid="checkout-error" className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-medium">
               {error}
             </div>
           )}
+
+          {/* GDPR Consent Checkbox */}
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => {
+                setAgreedToTerms(e.target.checked);
+                if (e.target.checked) setError(null);
+              }}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-600/30 shrink-0 cursor-pointer"
+            />
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+              I agree to the{' '}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Privacy Policy
+              </a>
+              , and I understand this report is for informational purposes and does not constitute legal advice.
+            </span>
+          </label>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
             {onCancel && (
@@ -177,7 +219,7 @@ export function CheckoutElement({
 
             <button
               data-testid="checkout-submit-button" type="submit"
-              disabled={loading}
+              disabled={loading || !agreedToTerms}
               className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md hover:shadow-blue-600/30 transition-all disabled:opacity-50 cursor-pointer"
             >
               {loading ? (

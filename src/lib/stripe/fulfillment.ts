@@ -1,5 +1,6 @@
 import { generateCompliancePdfBuffer } from '@/lib/pdf/generator';
 import { resend, isResendMock } from '@/lib/resend/client';
+import { getSenderEmailString, buildFulfillmentEmailHtml } from '@/lib/resend/template';
 import { getReportById, getReportByPaymentIntentId, updateReportPaid } from '@/lib/db/reports';
 import { uploadReportPdf } from '@/lib/storage';
 import { getMockReport, updateMockReport } from './mock-store';
@@ -132,28 +133,13 @@ export async function fulfillComplianceReportPayment({
         emailSent = true;
       } else {
         try {
-          const fromEmail =
-            process.env.RESEND_FROM_EMAIL || 'EU AI Act Compliance <onboarding@resend.dev>';
+          const fromEmail = getSenderEmailString();
           const emailResponse = await resend.emails.send({
             from: fromEmail,
             to: finalReceiptEmail,
-            subject: `Your EU AI Act Compliance Audit Report [${report.risk_tier} Risk]`,
-            text: `Thank you for your purchase. Attached is your complete EU AI Act Compliance Audit Report (ID: ${report.id}).\n\nClassification: ${report.risk_tier} Risk\nPrimary Citation: ${report.matched_article}\n\nYou can also download it anytime from your dashboard.`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
-                <h2 style="color: #2563eb; margin-bottom: 8px;">EU AI Act Compliance Audit Report</h2>
-                <p>Thank you for purchasing your official regulatory compliance audit report under Regulation (EU) 2024/1689.</p>
-                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-                  <p style="margin: 4px 0;"><strong>System ID:</strong> ${report.id}</p>
-                  <p style="margin: 4px 0;"><strong>Risk Classification:</strong> ${report.risk_tier} Risk</p>
-                  <p style="margin: 4px 0;"><strong>Category:</strong> ${report.matched_category}</p>
-                  <p style="margin: 4px 0;"><strong>Primary Citation:</strong> ${report.matched_article}</p>
-                </div>
-                <p>Your complete PDF report containing the Articles 9–17 statutory obligations matrix and prioritized remediation action plan is attached to this email.</p>
-                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-                <p style="font-size: 11px; color: #64748b;">This automated report is for informational purposes and does not constitute formal legal counsel.</p>
-              </div>
-            `,
+            subject: `Official Compliance Dossier: EU AI Act Audit Report [${report.risk_tier} Risk] - ${report.id.slice(0, 8)}`,
+            text: `EU AI Pass — Statutory Audit Report\nRegulation (EU) 2024/1689\n\nThank you for your purchase. Attached is your complete EU AI Act Compliance Audit Report.\n\nSystem ID: ${report.id}\nClassification: ${report.risk_tier} Risk\nPrimary Citation: ${report.matched_article}\nCategory: ${report.matched_category}\n\nYour PDF report contains the complete Articles 9–17 statutory obligations matrix and prioritized remediation action plan.\n\nYou can also download your report directly at: https://euaipass.com/api/reports/${report.id}/download\n\nSupport: support@euaipass.com\nNotice: This report is for informational purposes and does not constitute formal legal counsel.`,
+            html: buildFulfillmentEmailHtml(report),
             attachments: [
               {
                 filename: `EU-AI-Act-Compliance-Report-${report.id}.pdf`,
