@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import type { ComplianceReport } from '@/types/database';
 import { RiskBadge } from './risk-badge';
+import { RiskTierTaxonomyMatrix } from './risk-tier-taxonomy-matrix';
 import { CheckoutElement } from './checkout-element';
 import { AccountUpgrade } from './account-upgrade';
 import {
@@ -428,6 +429,17 @@ Verified against official text of Regulation (EU) 2024/1689.
 
       {/* Primary Classification Banner */}
       <RiskBadge tier={report.risk_tier} size="lg" showDescription={true} className="break-inside-avoid" />
+
+      {/* 4-Tier Risk Taxonomy Matrix & Interactive Checklist (category_generator pattern) */}
+      <div className="print:hidden">
+        <RiskTierTaxonomyMatrix
+          currentTier={report.risk_tier}
+          confidenceScore={report.confidence === 'High' ? 95 : report.confidence === 'Medium' ? 78 : 55}
+          confidenceLevel={report.confidence}
+          matchedArticle={report.matched_article}
+          matchedCategory={report.matched_category}
+        />
+      </div>
 
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:grid-cols-3 print:gap-3 break-inside-avoid">
